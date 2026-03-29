@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from typing import Literal, Optional
@@ -7,8 +5,14 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+# -------------------------------------------------------------------
+# REQUEST MODEL
+# -------------------------------------------------------------------
+
 class RecommendationRequest(BaseModel):
-    """/recommend endpoint'ine gelecek istek gövdesi."""
+    """
+    /recommend endpoint'ine gelecek istek gövdesi
+    """
 
     user_id: Optional[str] = Field(default=None)
     skin_type: Optional[str] = Field(default=None)
@@ -17,8 +21,14 @@ class RecommendationRequest(BaseModel):
     top_n: int = Field(default=10, ge=1, le=50)
 
 
+# -------------------------------------------------------------------
+# RESPONSE MODELS
+# -------------------------------------------------------------------
+
 class RecommendationItem(BaseModel):
-    """Tek bir öneri ürününü temsil eder."""
+    """
+    Tek bir öneri ürünü
+    """
 
     product_id: str
     product_name: str
@@ -31,7 +41,9 @@ class RecommendationItem(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
-    """/recommend endpoint'inin döndüreceği cevap modeli."""
+    """
+    /recommend endpoint çıktısı
+    """
 
     model_used: Literal["hybrid", "profile", "popularity"]
     total_recommendations: int
@@ -39,13 +51,17 @@ class RecommendationResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Basit health check cevabı."""
+    """
+    /health endpoint çıktısı
+    """
 
     status: str
     message: str
 
 
 class CategoriesResponse(BaseModel):
-    """Kategori listesini döndürmek için cevap modeli."""
+    """
+    /categories endpoint çıktısı
+    """
 
     categories: list[str]

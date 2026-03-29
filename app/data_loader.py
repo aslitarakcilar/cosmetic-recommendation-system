@@ -1,98 +1,169 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
 
-from pydantic import BaseModel, Field
-
-
-# -------------------------------------------------------------------
-# REQUEST MODELLERİ
-# -------------------------------------------------------------------
-
-class RecommendationRequest(BaseModel):
-    """
-    /recommend endpoint'ine gelecek istek gövdesi.
-
-    user_id:
-        Kullanıcı daha önce sistemde etkileşim üretmişse gönderilir.
-        Böylece backend hibrit / collaborative mantığı kullanabilir.
-
-    skin_type, skin_tone:
-        Yeni kullanıcılar veya profile-based fallback için kullanılır.
-
-    category:
-        Kullanıcının ürün istediği kategori.
-
-    top_n:
-        Kaç öneri dönüleceği.
-    """
-
-    user_id: Optional[str] = Field(
-        default=None,
-        description="Opsiyonel kullanıcı kimliği"
-    )
-    skin_type: Optional[str] = Field(
-        default=None,
-        description="Kullanıcının cilt tipi"
-    )
-    skin_tone: Optional[str] = Field(
-        default=None,
-        description="Kullanıcının cilt tonu"
-    )
-    category: str = Field(
-        ...,
-        min_length=1,
-        description="Öneri istenen ürün kategorisi"
-    )
-    top_n: int = Field(
-        default=10,
-        ge=1,
-        le=50,
-        description="Döndürülecek öneri sayısı"
-    )
+import pandas as pd
 
 
 # -------------------------------------------------------------------
-# RESPONSE MODELLERİ
+# PROJE YOLLARI
 # -------------------------------------------------------------------
 
-class RecommendationItem(BaseModel):
-    """
-    Tek bir öneri ürününü temsil eder.
-    """
-
-    product_id: str
-    product_name: str
-    brand_name: str
-    primary_category: str
-    secondary_category: str
-    tertiary_category: str
-    price_usd: Optional[float] = None
-    score: Optional[float] = None
+APP_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = APP_DIR.parent
+DATA_INTERIM_DIR = PROJECT_ROOT / "data_interim"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 
 
-class RecommendationResponse(BaseModel):
+# -------------------------------------------------------------------
+# DOSYA YOLU YARDIMCI FONKSİYONU
+# -------------------------------------------------------------------
+
+def _resolve_data_file(filename: str) -> Path:
     """
-    /recommend endpoint'inin döndüreceği ana response modeli.
+    data_interim içindeki bir dosyanın gerçekten var olup olmadığını kontrol eder.
     """
 
-    model_used: Literal["hybrid", "profile", "popularity"]
-    total_recommendations: int
-    recommendations: list[RecommendationItem]
+    file_path = DATA_INTERIM_DIR / filename
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"Gerekli veri dosyası bulunamadı: {file_path}")
+
+    return file_path
 
 
-class HealthResponse(BaseModel):
+# -------------------------------------------------------------------
+# ÜRÜN TABLOSU
+# -------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def load_products() -> pd.DataFrame:
     """
-    Basit health check cevabı.
+    Temizlenmiş ürün tablosunu yükler.
     """
 
-    status: str
-    message: str
+    file_path = _resolve_data_file("products_clean.csv")
+    df = pd.read_csv(file_path)
+
+    if "product_id" in df.columns:
+        df["product_id"] = df["product_id"].astype(str)
+
+    text_cols = [
+        "product_name",
+        "brand_name",
+        "primary_category",
+        "secondary_category",
+        "tertiary_category",
+    ]
+
+    for col in text_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna("unknown")
+
+    return df
 
 
-class CategoriesResponse(BaseModel):
+# -------------------------------------------------------------------
+# ETKİLEŞİM TABLOSU
+# -------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def load_interactions() -> pd.DataFrame:
     """
-    Kategori listesini döndürmek için response modeli.
+    Kullanıcı-ürün etkileşim tablosunu yükler.
+    Şu an reviews_cf_last.csv kullanılıyor.
     """
 
-    categories: list[str]
+    file_path = _resolve_data_file("reviews_cf_last.csv")
+    df = pd.read_csv(file_path)
+
+    if "author_id" in df.columns:
+        df["author_id"] = df["author_id"].astype(str)
+
+    if "product_id" in df.columns:
+        df["product_id"] = df["product_id"].astype(str)
+
+    if "submission_time" in df.columns:
+        df["submission_time"] = pd.to_datetime(df["submission_time"], errors="coerce")
+
+    return df
+
+
+# -------------------------------------------------------------------
+# PROFİL TABLOSU (OPSİYONEL)
+# -------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def load_product_profile() -> Optional[pd.DataFrame]:
+    """
+    Eğer product_profile benzeri çıktı dosyası varsa yükler.
+    Yoksa None döner.
+    """
+
+    candidate_files = [
+        "product_profile.csv",
+        "product_profile_final.csv",
+    ]
+
+    for filename in candidate_files:
+        file_path = DATA_INTERIM_DIR / filename
+
+        if file_path.exists():
+            df = pd.read_csv(file_path)
+
+            if "product_id" in df.columns:
+                df["product_id"] = df["product_id"].astype(str)
+
+            return df
+
+    return None
+
+
+# -------------------------------------------------------------------
+# YARDIMCI FONKSİYONLAR
+# -------------------------------------------------------------------
+
+def get_available_categories() -> list[str]:
+    """
+    Ürün tablosundaki benzersiz tertiary_category değerlerini döndürür.
+    """
+
+    products = load_products()
+
+    if "tertiary_category" not in products.columns:
+        return []
+
+    categories = (
+        products["tertiary_category"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+    )
+
+    categories = [cat for cat in categories.unique().tolist() if cat]
+    categories.sort()
+
+    return categories
+
+
+def get_user_history(user_id: str) -> pd.DataFrame:
+    """
+    Belirli bir kullanıcının geçmiş etkileşimlerini döndürür.
+    """
+
+    interactions = load_interactions()
+    user_id = str(user_id)
+
+    return interactions[interactions["author_id"] == user_id].copy()
+
+
+def user_has_history(user_id: str, min_interactions: int = 3) -> bool:
+    """
+    Kullanıcının öneri motorunda history-based yol için yeterli etkileşimi
+    olup olmadığını kontrol eder.
+    """
+
+    history = get_user_history(user_id)
+    return len(history) >= min_interactions
