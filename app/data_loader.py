@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import pickle 
 
 
 # -------------------------------------------------------------------
@@ -167,3 +168,22 @@ def user_has_history(user_id: str, min_interactions: int = 3) -> bool:
 
     history = get_user_history(user_id)
     return len(history) >= min_interactions
+# -------------------------------------------------------------------
+# HYBRID MODEL VERİSİNİ YÜKLEME
+# -------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def load_hybrid_data() -> dict:
+    """
+    Notebook'ta kaydedilmiş hybrid model objelerini yükler.
+    """
+
+    file_path = PROJECT_ROOT / "app" / "models" / "hybrid_data.pkl"
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"Hybrid model dosyası bulunamadı: {file_path}")
+
+    with open(file_path, "rb") as f:
+        hybrid_data = pickle.load(f)
+
+    return hybrid_data

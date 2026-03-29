@@ -45,7 +45,7 @@ class RecommendationResponse(BaseModel):
     /recommend endpoint çıktısı
     """
 
-    model_used: Literal["hybrid", "profile", "popularity"]
+    model_used: Literal["hybrid", "profile", "popularity", "hybrid_fallback_popularity"]
     total_recommendations: int
     recommendations: list[RecommendationItem]
 
