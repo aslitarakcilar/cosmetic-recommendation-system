@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
-
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from .data_loader import get_available_categories
 from .recommender import get_recommendations
 from .schemas import (
@@ -10,6 +10,12 @@ from .schemas import (
     RecommendationRequest,
     RecommendationResponse,
 )
+
+from sqlalchemy.orm import Session
+
+from .auth import create_user, get_user_by_email
+from .database import get_db
+from .schemas import UserRegisterRequest, UserResponse
 
 
 # -------------------------------------------------------------------
@@ -20,6 +26,18 @@ app = FastAPI(
     title="Cosmetic Recommendation API",
     description="Kozmetik ürün öneri sistemi için backend API",
     version="1.0.0",
+
+)
+# -------------------------------------------------------------------
+# CORS AYARI (FRONTEND BAĞLANTISI İÇİN)
+# -------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # şimdilik açık bırakıyoruz
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -80,3 +98,27 @@ def recommend(request: RecommendationRequest) -> RecommendationResponse:
         total_recommendations=len(recommendations),
         recommendations=recommendations,
     )
+# -------------------------------------------------------------------
+# REGISTER
+# -------------------------------------------------------------------
+
+@app.post("/register", response_model=UserResponse)
+def register_user(request: UserRegisterRequest, db: Session = Depends(get_db)):
+    existing_user = get_user_by_email(db, request.email)
+
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu email ile kayıtlı kullanıcı zaten var."
+        )
+
+    user = create_user(
+        db=db,
+        name=request.name,
+        email=request.email,
+        password=request.password,
+        skin_type=request.skin_type,
+        skin_tone=request.skin_tone,
+    )
+
+    return user

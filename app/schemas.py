@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 
 # -------------------------------------------------------------------
@@ -65,3 +65,25 @@ class CategoriesResponse(BaseModel):
     """
 
     categories: list[str]
+
+
+
+
+
+class UserRegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    skin_type: Optional[str] = None
+    skin_tone: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+    skin_type: Optional[str] = None
+    skin_tone: Optional[str] = None
+
+    class Config:
+        from_attributes = True

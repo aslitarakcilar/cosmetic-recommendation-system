@@ -1,0 +1,17 @@
+from __future__ import annotations
+
+from sqlalchemy import Column, Integer, String
+
+from .database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password = Column(String, nullable=False)
+
+    skin_type = Column(String, nullable=True)
+    skin_tone = Column(String, nullable=True)
