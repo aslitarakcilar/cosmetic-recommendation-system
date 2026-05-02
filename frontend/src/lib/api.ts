@@ -37,6 +37,7 @@ export interface RecommendationItem {
 }
 
 export type RecommendationPath =
+  | "lightfm"
   | "hybrid"
   | "content_seeded"
   | "profile"
@@ -54,6 +55,22 @@ export interface RateResponse {
   product_id: string;
   rating: number;
   created_at: string;
+}
+
+export interface RatedProductDetail {
+  product_id: string;
+  rating: number;
+  rated_at: string;
+  product_name: string;
+  brand_name: string;
+  tertiary_category: string;
+  price_usd: number | null;
+}
+
+export interface UpdateProfilePayload {
+  skin_type?: string;
+  skin_tone?: string;
+  undertone?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -116,4 +133,10 @@ export const api = {
 
   getMyInteractions: (token: string): Promise<RateResponse[]> =>
     request("/interactions/mine", {}, token),
+
+  getMyInteractionsDetailed: (token: string): Promise<RatedProductDetail[]> =>
+    request("/interactions/mine/detailed", {}, token),
+
+  updateProfile: (token: string, payload: UpdateProfilePayload): Promise<UserProfile> =>
+    request("/users/me", { method: "PATCH", body: JSON.stringify(payload) }, token),
 };

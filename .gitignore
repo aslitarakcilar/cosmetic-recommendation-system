@@ -11,3 +11,6 @@ __pycache__/
 .DS_Store
 *.pyc
 .env
+.claude/
+.claire/
+app.db

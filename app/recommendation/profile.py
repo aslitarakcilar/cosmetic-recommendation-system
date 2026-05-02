@@ -31,9 +31,16 @@ def profile_recommend(
     if profile_df is None:
         return popularity_recommend(category, top_n)
 
+    # Join with products to get category info (product_profile.csv has no category column)
+    products = load_products()
     cat_lower = category.strip().lower()
-    mask = profile_df["tertiary_category"].astype(str).str.strip().str.lower() == cat_lower
-    category_df = profile_df[mask].copy()
+    cat_product_ids = set(
+        products.loc[
+            products["tertiary_category"].astype(str).str.strip().str.lower() == cat_lower,
+            "product_id",
+        ]
+    )
+    category_df = profile_df[profile_df["product_id"].isin(cat_product_ids)].copy()
 
     if category_df.empty:
         return popularity_recommend(category, top_n)
@@ -75,7 +82,5 @@ def profile_recommend(
     if ranked.empty:
         return popularity_recommend(category, top_n)
 
-    # Join product metadata
-    products = load_products().copy()
     result = ranked.merge(products, on="product_id", how="left").head(top_n)
     return result.reset_index(drop=True)

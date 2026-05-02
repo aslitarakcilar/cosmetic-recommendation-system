@@ -18,6 +18,16 @@ class RateResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RatedProductDetail(BaseModel):
+    product_id: str
+    rating: int
+    rated_at: datetime
+    product_name: str
+    brand_name: str
+    tertiary_category: str
+    price_usd: float | None
+
+
 class InteractionSummary(BaseModel):
     total_ratings: int
     recommendation_path: str

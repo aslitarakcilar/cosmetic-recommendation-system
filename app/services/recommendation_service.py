@@ -6,8 +6,9 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from ..recommendation.content_seeded import content_seeded_recommend
-from ..recommendation.data_loader import user_has_history
+from ..recommendation.data_loader import lightfm_has_user, user_has_history
 from ..recommendation.hybrid import hybrid_recommend
+from ..recommendation.lightfm import lightfm_recommend
 from ..recommendation.popularity import popularity_recommend
 from ..recommendation.profile import profile_recommend
 from ..schemas.recommendation import RecommendationItem, RecommendationPath
@@ -18,6 +19,11 @@ from ..services.interaction_service import (
 )
 
 _EXPLANATIONS: dict[str, str] = {
+    "lightfm": (
+        "Geçmiş etkileşimlerine göre LightFM collaborative filtering modeli kullanıldı. "
+        "Bu model, benzer kullanıcı davranışlarını öğrenerek senin için en olası "
+        "ürünleri sıralar."
+    ),
     "hybrid": (
         "Sephora verisetindeki geçmişin bulundu. Sistem, sana benzer kullanıcıların "
         "beğendiği ürünleri collaborative filtering ile buldu; ardından içerik "
@@ -45,6 +51,13 @@ _EXPLANATIONS: dict[str, str] = {
 def _df_to_items(df: pd.DataFrame) -> list[RecommendationItem]:
     items: list[RecommendationItem] = []
     for _, row in df.iterrows():
+        score = row.get("score")
+        if pd.isna(score):
+            score = row.get("cf_score")
+        if pd.isna(score):
+            score = row.get("profile_score")
+        if pd.isna(score):
+            score = row.get("popularity_score")
         items.append(
             RecommendationItem(
                 product_id=str(row.get("product_id", "")),
@@ -55,7 +68,7 @@ def _df_to_items(df: pd.DataFrame) -> list[RecommendationItem]:
                 tertiary_category=str(row.get("tertiary_category", "unknown")),
                 price_usd=float(row["price_usd"]) if pd.notna(row.get("price_usd")) else None,
                 rating=float(row["rating"]) if pd.notna(row.get("rating")) else None,
-                score=float(row["score"]) if pd.notna(row.get("score")) else None,
+                score=float(score) if pd.notna(score) else None,
             )
         )
     return items
@@ -72,20 +85,27 @@ def get_recommendations(
     """
     Recommendation routing — from strongest to weakest signal:
 
-    1. Sephora dataset history  → hybrid (CF + content rerank)
-    2. App interaction history  → content-seeded (multi-seed TF-IDF)
-    3. Skin profile             → profile-based (weighted skin type/tone)
-    4. No context               → popularity baseline
+    1. User exists in current LightFM artifact  → LightFM CF
+    2. App interaction history                  → content-seeded
+    3. Skin profile                             → profile-based
+    4. No context                               → popularity baseline
     """
     df: pd.DataFrame | None = None
     path: RecommendationPath
 
-    # ── Path 1: Sephora dataset history ──────────────────────────
-    sephora_id = str(user_id)
-    if user_has_history(sephora_id):
-        df, path = hybrid_recommend(sephora_id, category, top_n)
+    # ── Path 1: User exists in current LightFM artifact ──────────
+    current_user_id = str(user_id)
+    if lightfm_has_user(current_user_id):
+        df = lightfm_recommend(current_user_id, category, top_n)
         if df is not None and not df.empty:
-            return path, _EXPLANATIONS[path], _df_to_items(df)
+            return "lightfm", _EXPLANATIONS["lightfm"], _df_to_items(df)
+
+        # If this is also a legacy Sephora-history user, preserve the
+        # previous hybrid fallback when LightFM has no category coverage.
+        if user_has_history(current_user_id):
+            df, path = hybrid_recommend(current_user_id, category, top_n)
+            if df is not None and not df.empty:
+                return path, _EXPLANATIONS[path], _df_to_items(df)
 
     # ── Path 2: App interaction history ──────────────────────────
     if user_has_app_history(db, user_id):

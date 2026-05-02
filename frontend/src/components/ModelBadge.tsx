@@ -6,6 +6,10 @@ interface Props {
 }
 
 const META: Record<RecommendationPath, { label: string; color: string }> = {
+  lightfm: {
+    label: "LightFM Collaborative Filtering",
+    color: "bg-cyan-50 text-cyan-800 border-cyan-200",
+  },
   hybrid: {
     label: "Hybrid — CF + İçerik",
     color: "bg-emerald-50 text-emerald-800 border-emerald-200",

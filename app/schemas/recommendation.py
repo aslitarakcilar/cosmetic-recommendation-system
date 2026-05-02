@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 RecommendationPath = Literal[
+    "lightfm",
     "hybrid",
     "content_seeded",
     "profile",

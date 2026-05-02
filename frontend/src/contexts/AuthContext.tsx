@@ -18,6 +18,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (token: string) => Promise<void>;
   logout: () => void;
+  refreshUser: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -32,21 +33,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const stored =
-      typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+    let cancelled = false;
 
-    if (!stored) {
-      setState({ user: null, token: null, loading: false });
-      return;
+    async function bootstrapAuth() {
+      const stored = localStorage.getItem(TOKEN_KEY);
+
+      if (!stored) {
+        setState({ user: null, token: null, loading: false });
+        return;
+      }
+
+      try {
+        const user = await api.getMe(stored);
+        if (!cancelled) {
+          setState({ user, token: stored, loading: false });
+        }
+      } catch {
+        localStorage.removeItem(TOKEN_KEY);
+        if (!cancelled) {
+          setState({ user: null, token: null, loading: false });
+        }
+      }
     }
 
-    api
-      .getMe(stored)
-      .then((user) => setState({ user, token: stored, loading: false }))
-      .catch(() => {
-        localStorage.removeItem(TOKEN_KEY);
-        setState({ user: null, token: null, loading: false });
-      });
+    bootstrapAuth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (token: string) => {
@@ -60,8 +74,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: null, token: null, loading: false });
   }, []);
 
+  const refreshUser = useCallback(async (token: string) => {
+    const user = await api.getMe(token);
+    setState((prev) => ({ ...prev, user }));
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
+    <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

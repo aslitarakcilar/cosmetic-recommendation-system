@@ -40,3 +40,21 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     if user is None or not verify_password(password, user.hashed_password):
         return None
     return user
+
+
+def update_user_profile(
+    db: Session,
+    user: User,
+    skin_type: str | None,
+    skin_tone: str | None,
+    undertone: str | None,
+) -> User:
+    if skin_type is not None:
+        user.skin_type = skin_type
+    if skin_tone is not None:
+        user.skin_tone = skin_tone
+    if undertone is not None:
+        user.undertone = undertone
+    db.commit()
+    db.refresh(user)
+    return user

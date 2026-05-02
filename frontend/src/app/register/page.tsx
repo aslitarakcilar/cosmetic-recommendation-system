@@ -41,7 +41,7 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
       <label className="text-xs uppercase tracking-[0.15em] text-stone-500">
         {label}
       </label>
@@ -52,9 +52,9 @@ function Field({
 }
 
 const INPUT_CLS =
-  "border-b border-stone-300 bg-transparent py-2.5 text-sm text-stone-800 placeholder-stone-300 outline-none focus:border-stone-700 transition-colors";
+  "rounded-2xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm text-stone-800 placeholder-stone-300 outline-none transition-colors focus:border-stone-700";
 const SELECT_CLS =
-  "border-b border-stone-300 bg-transparent py-2.5 text-sm text-stone-800 outline-none focus:border-stone-700 transition-colors";
+  "rounded-2xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm text-stone-800 outline-none transition-colors focus:border-stone-700";
 
 type FormErrors = Partial<Record<
   "email" | "password" | "skin_type" | "skin_tone" | "undertone" | "general",
@@ -83,21 +83,22 @@ export default function RegisterPage() {
   }
 
   function validate(): FormErrors {
-    const e: FormErrors = {};
-    if (!form.email) e.email = "E-posta gerekli.";
-    if (!form.password || form.password.length < 6)
-      e.password = "Şifre en az 6 karakter olmalı.";
-    if (!form.skin_type) e.skin_type = "Cilt tipi seçiniz.";
-    if (!form.skin_tone) e.skin_tone = "Cilt tonu seçiniz.";
-    if (!form.undertone) e.undertone = "Alt ton seçiniz.";
-    return e;
+    const nextErrors: FormErrors = {};
+    if (!form.email) nextErrors.email = "E-posta gerekli.";
+    if (!form.password || form.password.length < 6) {
+      nextErrors.password = "Şifre en az 6 karakter olmalı.";
+    }
+    if (!form.skin_type) nextErrors.skin_type = "Cilt tipi seçiniz.";
+    if (!form.skin_tone) nextErrors.skin_tone = "Cilt tonu seçiniz.";
+    if (!form.undertone) nextErrors.undertone = "Alt ton seçiniz.";
+    return nextErrors;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const errs = validate();
-    if (Object.keys(errs).length) {
-      setErrors(errs);
+    const nextErrors = validate();
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
       return;
     }
 
@@ -106,30 +107,80 @@ export default function RegisterPage() {
 
     try {
       await api.register(form);
-      const token_res = await api.login(form.email, form.password);
-      await login(token_res.access_token);
+      const tokenRes = await api.login(form.email, form.password);
+      await login(tokenRes.access_token);
       router.push("/explore");
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Kayıt başarısız.";
-      setErrors({ general: msg });
+      const message = err instanceof ApiError ? err.message : "Kayıt başarısız.";
+      setErrors({ general: message });
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="min-h-[calc(100vh-3.5rem)] flex">
-      {/* ── Form paneli ───────────────────────────────────── */}
-      <div className="w-full md:w-1/2 flex flex-col justify-center px-8 md:px-14 py-14">
-        <div className="max-w-sm w-full mx-auto md:mx-0">
-          <h1 className="text-3xl font-light text-stone-900 mb-1">Kayıt ol</h1>
-          <p className="text-sm text-stone-500 mb-8">
-            Cilt profilin, yeni kullanıcı olarak sana uygun ürünleri bulmak
-            için kullanılır.
+    <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-7xl px-5 py-8 md:px-6 md:py-10">
+      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="overflow-hidden rounded-[2rem] border border-[color:var(--border-strong)] bg-[linear-gradient(135deg,rgba(255,255,255,0.9),rgba(246,236,224,0.95))] px-6 py-7 shadow-[0_24px_60px_rgba(28,25,23,0.06)] md:px-8 md:py-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/75 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-stone-500 shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
+            Yeni kullanıcı akışı
+          </div>
+
+          <h1 className="mt-6 max-w-xl text-3xl font-light leading-tight text-stone-900 md:text-4xl">
+            Cilt profilinle başlayan
+            <span className="block text-[color:var(--accent-deep)]">
+              kişisel bir öneri hesabı oluştur
+            </span>
+          </h1>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-stone-600">
+            İlk günden isabetli öneriler üretebilmek için cilt bilgilerini kullanıyoruz.
+            Daha sonra puanlamaların geldikçe sistem davranış verinle birlikte çalışıyor.
           </p>
 
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-stone-400">
+                Aşama 1
+              </p>
+              <p className="mt-2 text-sm font-medium text-stone-900">Profil eşleşmesi</p>
+              <p className="mt-1 text-xs leading-6 text-stone-500">
+                Cilt tipi, tonu ve alt ton başlangıç sinyali olur.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-stone-400">
+                Aşama 2
+              </p>
+              <p className="mt-2 text-sm font-medium text-stone-900">İçerik benzerliği</p>
+              <p className="mt-1 text-xs leading-6 text-stone-500">
+                Puanladığın ürünlere yakın seçenekler öne çıkar.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-stone-400">
+                Aşama 3
+              </p>
+              <p className="mt-2 text-sm font-medium text-stone-900">Hybrid güç</p>
+              <p className="mt-1 text-xs leading-6 text-stone-500">
+                Davranış ve kategori sinyalleri birlikte dengelenir.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[2rem] border border-[color:var(--border-strong)] bg-[color:var(--surface)] px-6 py-7 shadow-[0_24px_60px_rgba(28,25,23,0.06)] md:px-8 md:py-8">
+          <div className="mb-6">
+            <p className="text-xs uppercase tracking-[0.22em] text-stone-400">
+              Hesap oluştur
+            </p>
+            <p className="mt-3 text-sm leading-7 text-stone-500">
+              Birkaç alan doldurman yeterli. Sonrasında keşfet ekranında kişiselleştirilmiş
+              ürünleri hemen görebilirsin.
+            </p>
+          </div>
+
           <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
-            {/* E-posta */}
             <Field label="E-posta" error={errors.email}>
               <input
                 type="email"
@@ -140,7 +191,6 @@ export default function RegisterPage() {
               />
             </Field>
 
-            {/* Şifre */}
             <Field label="Şifre" error={errors.password}>
               <input
                 type="password"
@@ -151,14 +201,11 @@ export default function RegisterPage() {
               />
             </Field>
 
-            {/* Cilt profili başlığı */}
-            <div className="pt-3 border-t border-stone-100">
-              <p className="text-xs uppercase tracking-[0.15em] text-stone-400 mb-4">
+            <div className="rounded-[1.5rem] border border-stone-200 bg-stone-50/70 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-stone-400">
                 Cilt profili
               </p>
-
-              <div className="flex flex-col gap-5">
-                {/* Cilt tipi */}
+              <div className="mt-4 flex flex-col gap-4">
                 <Field label="Cilt tipi" error={errors.skin_type}>
                   <select
                     value={form.skin_type}
@@ -166,15 +213,14 @@ export default function RegisterPage() {
                     className={SELECT_CLS}
                   >
                     <option value="">Seçiniz…</option>
-                    {SKIN_TYPES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
+                    {SKIN_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
                 </Field>
 
-                {/* Cilt tonu */}
                 <Field label="Cilt tonu" error={errors.skin_tone}>
                   <select
                     value={form.skin_tone}
@@ -182,15 +228,14 @@ export default function RegisterPage() {
                     className={SELECT_CLS}
                   >
                     <option value="">Seçiniz…</option>
-                    {SKIN_TONES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
+                    {SKIN_TONES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
                 </Field>
 
-                {/* Alt ton */}
                 <Field label="Cilt alt tonu" error={errors.undertone}>
                   <select
                     value={form.undertone}
@@ -198,9 +243,9 @@ export default function RegisterPage() {
                     className={SELECT_CLS}
                   >
                     <option value="">Seçiniz…</option>
-                    {UNDERTONES.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
+                    {UNDERTONES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
@@ -208,9 +253,8 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Genel hata */}
             {errors.general && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded">
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                 {errors.general}
               </div>
             )}
@@ -218,50 +262,22 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="mt-2 bg-stone-900 text-white py-3 text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-1 rounded-2xl bg-stone-900 py-3 text-sm uppercase tracking-[0.2em] text-white transition-all hover:-translate-y-0.5 hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? "Hesap oluşturuluyor…" : "Hesap oluştur"}
             </button>
           </form>
 
-          <p className="mt-5 text-sm text-stone-500">
+          <p className="mt-6 text-sm text-stone-500">
             Zaten hesabın var mı?{" "}
             <Link
               href="/login"
-              className="text-stone-800 underline underline-offset-2 hover:text-amber-700"
+              className="font-medium text-stone-900 underline underline-offset-2 hover:text-[color:var(--accent-deep)]"
             >
               Giriş yap
             </Link>
           </p>
-        </div>
-      </div>
-
-      {/* ── Bilgi paneli ────────────────────────────────────── */}
-      <div className="hidden md:flex md:w-1/2 bg-stone-900 text-white flex-col justify-center px-14">
-        <p className="text-xs uppercase tracking-[0.2em] text-stone-500 mb-8">
-          Nasıl çalışır?
-        </p>
-        <div className="flex flex-col gap-7">
-          {[
-            [
-              "Profil tabanlı (yeni kullanıcı)",
-              "Cilt tipine ve tonuna göre, aynı profile sahip kullanıcıların yüksek puan verdiği ürünler önerilir. Hiç geçmiş gerekmez.",
-            ],
-            [
-              "İçerik tabanlı (≥3 puanlama)",
-              "Beğendiğin ürünlere benzer ürünler TF-IDF metin benzerliğiyle bulunur.",
-            ],
-            [
-              "Hybrid (Sephora geçmişi)",
-              "Verisetindeki geçmişin varsa, collaborative filtering + içerik reranking ile en güçlü kişiselleştirme aktif olur.",
-            ],
-          ].map(([title, desc]) => (
-            <div key={title}>
-              <h3 className="text-sm font-medium text-white mb-1">{title}</h3>
-              <p className="text-sm text-stone-400 leading-relaxed">{desc}</p>
-            </div>
-          ))}
-        </div>
+        </section>
       </div>
     </div>
   );

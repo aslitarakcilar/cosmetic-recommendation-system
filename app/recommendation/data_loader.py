@@ -9,6 +9,8 @@ import pickle
 
 from ..config import settings
 
+_PICKLE_CACHE: dict[str, tuple[float, object]] = {}
+
 
 def _require(filename: str) -> Path:
     path = settings.data_interim_dir / filename
@@ -51,13 +53,38 @@ def load_product_profile() -> Optional[pd.DataFrame]:
     return None
 
 
-@lru_cache(maxsize=1)
+def _load_versioned_pickle(path: Path, cache_key: str) -> Optional[dict]:
+    if not path.exists():
+        _PICKLE_CACHE.pop(cache_key, None)
+        return None
+
+    mtime = path.stat().st_mtime
+    cached = _PICKLE_CACHE.get(cache_key)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]  # type: ignore[return-value]
+
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    _PICKLE_CACHE[cache_key] = (mtime, data)
+    return data
+
+
 def load_hybrid_data() -> Optional[dict]:
     path = settings.app_models_dir / "hybrid_data.pkl"
-    if not path.exists():
-        return None
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    return _load_versioned_pickle(path, "hybrid_data")
+
+
+def load_lightfm_data() -> Optional[dict]:
+    path = settings.app_models_dir / "lightfm_data.pkl"
+    return _load_versioned_pickle(path, "lightfm_data")
+
+
+def lightfm_has_user(author_id: str) -> bool:
+    data = load_lightfm_data()
+    if data is None:
+        return False
+    user_to_idx = data.get("user_to_idx") or {}
+    return str(author_id) in user_to_idx
 
 
 def get_user_history(author_id: str) -> pd.DataFrame:

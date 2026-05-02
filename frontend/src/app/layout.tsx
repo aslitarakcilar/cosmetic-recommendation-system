@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${geist.variable} h-full`}>
+    <html lang="tr" className={`${geist.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-[var(--background)]">
         <AuthProvider>
           <Header />
