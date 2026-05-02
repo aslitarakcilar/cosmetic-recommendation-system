@@ -31,6 +31,12 @@ def _min_max_normalize(series: pd.Series) -> pd.Series:
     return (series - min_val) / (max_val - min_val)
 
 
+def _safe_normalize(values: pd.Series) -> pd.Series:
+    if values.empty:
+        return values
+    return _min_max_normalize(values.astype("float64").fillna(0.0))
+
+
 @dataclass
 class FastEvaluationModels:
     train_df: pd.DataFrame
@@ -47,6 +53,8 @@ class FastEvaluationModels:
     lightfm_model_obj: Any | None = None
     lightfm_user_to_idx: dict[str, int] | None = None
     lightfm_item_ids: np.ndarray | None = None
+    lightfm_user_features_matrix: Any | None = None
+    lightfm_item_features_matrix: Any | None = None
     candidate_pool_size: int = 200
 
     def __post_init__(self) -> None:
@@ -156,6 +164,7 @@ class FastEvaluationModels:
         self._multi_seed_content_cache: dict[tuple[str, str, int], pd.DataFrame] = {}
         self._cf_cache: dict[tuple[str, str], pd.DataFrame] = {}
         self._lightfm_cache: dict[tuple[str, str], pd.DataFrame] = {}
+        self._hybrid_lightfm_cache: dict[tuple[str, str, int], pd.DataFrame] = {}
         self._profile_cache: dict[tuple[str, str | None, str | None], pd.DataFrame | None] = {}
 
     @staticmethod
@@ -227,6 +236,72 @@ class FastEvaluationModels:
                 break
 
         return pd.DataFrame(rows)
+
+    def _build_score_map(
+        self,
+        frame: pd.DataFrame | None,
+        score_col: str,
+    ) -> dict[str, float]:
+        if frame is None or frame.empty or score_col not in frame.columns:
+            return {}
+        return pd.Series(
+            frame[score_col].astype("float64").values,
+            index=frame["product_id"].astype(str),
+        ).to_dict()
+
+    def _candidate_similarity(self, product_id_a: str, product_id_b: str) -> float:
+        if self.sbert_embeddings is not None:
+            if product_id_a in self.productid_to_index and product_id_b in self.productid_to_index:
+                idx_a = self.productid_to_index[product_id_a]
+                idx_b = self.productid_to_index[product_id_b]
+                return float(self.sbert_embeddings[idx_a] @ self.sbert_embeddings[idx_b])
+
+        if product_id_a in self.productid_to_index and product_id_b in self.productid_to_index:
+            idx_a = self.productid_to_index[product_id_a]
+            idx_b = self.productid_to_index[product_id_b]
+            return float(self.similarity_matrix[idx_a][idx_b])
+
+        return 0.0
+
+    def _mmr_rerank(
+        self,
+        candidate_df: pd.DataFrame,
+        top_n: int,
+        lambda_relevance: float,
+    ) -> pd.DataFrame:
+        if candidate_df.empty:
+            return candidate_df
+
+        working_df = candidate_df.copy().reset_index(drop=True)
+        selected_ids: list[str] = []
+        selected_rows: list[pd.Series] = []
+
+        while len(selected_rows) < min(top_n, len(working_df)):
+            if not selected_ids:
+                best_idx = working_df["base_score"].astype("float64").idxmax()
+                best_row = working_df.loc[best_idx]
+            else:
+                mmr_scores: list[float] = []
+                for _, row in working_df.iterrows():
+                    product_id = str(row["product_id"])
+                    redundancy = max(
+                        self._candidate_similarity(product_id, selected_id)
+                        for selected_id in selected_ids
+                    )
+                    mmr_score = lambda_relevance * float(row["base_score"]) - (1 - lambda_relevance) * redundancy
+                    mmr_scores.append(mmr_score)
+
+                working_df = working_df.assign(mmr_score=mmr_scores)
+                best_idx = working_df["mmr_score"].astype("float64").idxmax()
+                best_row = working_df.loc[best_idx]
+
+            selected_ids.append(str(best_row["product_id"]))
+            selected_rows.append(best_row)
+            working_df = working_df[working_df["product_id"].astype(str) != str(best_row["product_id"])].reset_index(drop=True)
+
+        ranked = pd.DataFrame(selected_rows).reset_index(drop=True)
+        ranked["final_score"] = np.linspace(1.0, 1.0 - 0.01 * max(len(ranked) - 1, 0), len(ranked))
+        return ranked
 
     def popularity_model(self, row: pd.Series, top_n: int = 10) -> pd.DataFrame | None:
         user_id = str(row["author_id"])
@@ -455,7 +530,13 @@ class FastEvaluationModels:
                 item_positions = self.lightfm_category_to_item_positions[category].astype(np.int32)
                 user_idx = int(self.lightfm_user_to_idx[user_id])
                 user_array = np.full(item_positions.shape, user_idx, dtype=np.int32)
-                category_scores = self.lightfm_model_obj.predict(user_array, item_positions, num_threads=1)
+                category_scores = self.lightfm_model_obj.predict(
+                    user_array,
+                    item_positions,
+                    item_features=self.lightfm_item_features_matrix,
+                    user_features=self.lightfm_user_features_matrix,
+                    num_threads=1,
+                )
                 ranking_positions = np.argsort(-category_scores)
 
                 rows: list[dict[str, float | str]] = []
@@ -554,3 +635,96 @@ class FastEvaluationModels:
             cf_depth=100,
             seed_count=seed_count,
         )
+
+    def hybrid_lightfm_diverse(
+        self,
+        row: pd.Series,
+        top_n: int = 10,
+        candidate_depth: int = 60,
+        rerank_depth: int = 30,
+    ) -> pd.DataFrame | None:
+        user_id = str(row["author_id"])
+        category = _normalize_category(row["tertiary_category"])
+        cache_key = (user_id, category, candidate_depth, rerank_depth)
+
+        if cache_key not in self._hybrid_lightfm_cache:
+            lightfm_rec = self.lightfm_model(row, top_n=min(candidate_depth, self.candidate_pool_size))
+            if lightfm_rec is None or lightfm_rec.empty:
+                self._hybrid_lightfm_cache[cache_key] = pd.DataFrame()
+            else:
+                tfidf_rec = self.content_model(row, top_n=candidate_depth)
+                sbert_rec = self.sbert_content_model(row, top_n=candidate_depth)
+                profile_rec = self.profile_model(row, top_n=candidate_depth)
+                popularity_rec = self.popularity_model(row, top_n=candidate_depth)
+
+                tfidf_map = self._build_score_map(tfidf_rec, "similarity_score")
+                sbert_map = self._build_score_map(sbert_rec, "similarity_score")
+                profile_map = self._build_score_map(profile_rec, "profile_score")
+                popularity_map = self._build_score_map(popularity_rec, "popularity_score")
+
+                candidate_df = lightfm_rec.copy()
+                candidate_df["tfidf_score"] = candidate_df["product_id"].astype(str).map(tfidf_map).fillna(0.0)
+                candidate_df["sbert_score"] = candidate_df["product_id"].astype(str).map(sbert_map).fillna(0.0)
+                candidate_df["profile_score"] = candidate_df["product_id"].astype(str).map(profile_map).fillna(0.0)
+                candidate_df["popularity_score"] = candidate_df["product_id"].astype(str).map(popularity_map).fillna(0.0)
+
+                candidate_df["lightfm_norm"] = _safe_normalize(candidate_df["cf_score"])
+                candidate_df["tfidf_norm"] = _safe_normalize(candidate_df["tfidf_score"])
+                candidate_df["sbert_norm"] = _safe_normalize(candidate_df["sbert_score"])
+                candidate_df["profile_norm"] = _safe_normalize(candidate_df["profile_score"])
+                candidate_df["popularity_norm"] = _safe_normalize(candidate_df["popularity_score"])
+
+                history_count = self.user_history_count.get(user_id, 0)
+                if history_count >= 20:
+                    weights = {
+                        "lightfm_norm": 0.72,
+                        "sbert_norm": 0.15,
+                        "tfidf_norm": 0.07,
+                        "profile_norm": 0.03,
+                        "popularity_norm": 0.03,
+                    }
+                    lambda_relevance = 0.88
+                elif history_count >= 10:
+                    weights = {
+                        "lightfm_norm": 0.64,
+                        "sbert_norm": 0.18,
+                        "tfidf_norm": 0.08,
+                        "profile_norm": 0.06,
+                        "popularity_norm": 0.04,
+                    }
+                    lambda_relevance = 0.82
+                else:
+                    weights = {
+                        "lightfm_norm": 0.52,
+                        "sbert_norm": 0.22,
+                        "tfidf_norm": 0.10,
+                        "profile_norm": 0.10,
+                        "popularity_norm": 0.06,
+                    }
+                    lambda_relevance = 0.78
+
+                candidate_df["base_score"] = sum(
+                    candidate_df[column] * weight
+                    for column, weight in weights.items()
+                )
+                candidate_df = candidate_df.sort_values("base_score", ascending=False).head(candidate_depth).reset_index(drop=True)
+                rerank_pool = candidate_df.head(min(rerank_depth, len(candidate_df))).reset_index(drop=True)
+                reranked = self._mmr_rerank(rerank_pool, top_n=top_n, lambda_relevance=lambda_relevance)
+                self._hybrid_lightfm_cache[cache_key] = reranked
+
+        result = self._hybrid_lightfm_cache[cache_key].head(top_n).copy()
+        if result.empty:
+            return None
+
+        return result[
+            [
+                "product_id",
+                "final_score",
+                "base_score",
+                "lightfm_norm",
+                "sbert_norm",
+                "tfidf_norm",
+                "profile_norm",
+                "popularity_norm",
+            ]
+        ]

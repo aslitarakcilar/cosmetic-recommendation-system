@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from sqlalchemy.orm import Session
+
+from ..user_model import User
+from .auth_service import hash_password, verify_password
+
+
+def create_user(
+    db: Session,
+    email: str,
+    password: str,
+    skin_type: str,
+    skin_tone: str,
+    undertone: str,
+) -> User:
+    user = User(
+        email=email,
+        hashed_password=hash_password(password),
+        skin_type=skin_type,
+        skin_tone=skin_tone,
+        undertone=undertone,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_user_by_email(db: Session, email: str) -> User | None:
+    return db.query(User).filter(User.email == email).first()
+
+
+def get_user_by_id(db: Session, user_id: int) -> User | None:
+    return db.query(User).filter(User.id == user_id).first()
+
+
+def authenticate_user(db: Session, email: str, password: str) -> User | None:
+    user = get_user_by_email(db, email)
+    if user is None or not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+
+def update_user_profile(
+    db: Session,
+    user: User,
+    skin_type: str | None,
+    skin_tone: str | None,
+    undertone: str | None,
+) -> User:
+    if skin_type is not None:
+        user.skin_type = skin_type
+    if skin_tone is not None:
+        user.skin_tone = skin_tone
+    if undertone is not None:
+        user.undertone = undertone
+    db.commit()
+    db.refresh(user)
+    return user
