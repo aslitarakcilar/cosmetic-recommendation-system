@@ -1,0 +1,15 @@
+# Backend dependencies — install in the lightfm_env conda environment:
+#   conda activate lightfm_env
+#   pip install -r requirements_backend.txt
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+pydantic>=2.0
+pydantic-settings>=2.0
+python-jose[cryptography]>=3.3
+bcrypt>=4.0
+python-multipart>=0.0.9
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
