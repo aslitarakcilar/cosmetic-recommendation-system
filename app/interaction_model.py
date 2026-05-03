@@ -14,6 +14,8 @@ class Interaction(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     product_id = Column(String, nullable=False)
     rating = Column(Integer, nullable=False)  # 1–5
+    recommendation_event_id = Column(Integer, ForeignKey("recommendation_events.id", ondelete="SET NULL"), nullable=True, index=True)
+    recommended_rank = Column(Integer, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

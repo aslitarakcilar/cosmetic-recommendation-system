@@ -4,27 +4,51 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from ..interaction_model import Interaction
+from .recommendation_tracking_service import resolve_rating_attribution
 
 MIN_HISTORY_FOR_PERSONALIZATION = 3
 
 
-def upsert_rating(db: Session, user_id: int, product_id: str, rating: int) -> Interaction:
+def upsert_rating(
+    db: Session,
+    user_id: int,
+    product_id: str,
+    rating: int,
+    recommendation_event_id: int | None = None,
+) -> tuple[Interaction, bool]:
     """Insert or update a user's rating for a product (one rating per product per user)."""
+    attribution = resolve_rating_attribution(
+        db,
+        user_id=user_id,
+        product_id=product_id,
+        recommendation_event_id=recommendation_event_id,
+    )
     stmt = (
         insert(Interaction)
-        .values(user_id=user_id, product_id=product_id, rating=rating)
+        .values(
+            user_id=user_id,
+            product_id=product_id,
+            rating=rating,
+            recommendation_event_id=attribution.recommendation_event_id,
+            recommended_rank=attribution.recommended_rank,
+        )
         .on_conflict_do_update(
             index_elements=["user_id", "product_id"],
-            set_={"rating": rating},
+            set_={
+                "rating": rating,
+                "recommendation_event_id": attribution.recommendation_event_id,
+                "recommended_rank": attribution.recommended_rank,
+            },
         )
     )
     db.execute(stmt)
     db.commit()
-    return (
+    interaction = (
         db.query(Interaction)
         .filter(Interaction.user_id == user_id, Interaction.product_id == product_id)
         .first()
     )
+    return interaction, attribution.attributed_within_window
 
 
 def get_user_interactions(db: Session, user_id: int) -> list[Interaction]:

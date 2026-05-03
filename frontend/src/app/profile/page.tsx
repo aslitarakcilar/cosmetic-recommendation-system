@@ -8,6 +8,7 @@ import {
   ApiError,
   type RatedProductDetail,
 } from "../../lib/api";
+import { toTitleCase } from "../../lib/utils";
 
 const SKIN_TYPES = [
   { value: "dry", label: "Kuru" },
@@ -59,14 +60,6 @@ function ProfileRatingsSkeleton() {
       ))}
     </div>
   );
-}
-
-function toTitleCase(value: string) {
-  return value
-    .split(/[_-\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 export default function ProfilePage() {

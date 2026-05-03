@@ -48,6 +48,7 @@ export interface RecommendResponse {
   model_used: RecommendationPath;
   model_explanation: string;
   total_recommendations: number;
+  recommendation_event_id: number;
   recommendations: RecommendationItem[];
 }
 
@@ -55,6 +56,63 @@ export interface RateResponse {
   product_id: string;
   rating: number;
   created_at: string;
+  recommendation_event_id: number | null;
+  recommended_rank: number | null;
+  attributed_within_window: boolean;
+}
+
+export interface RecommendationMetricsResponse {
+  attribution_window_hours: number;
+  total_recommendation_events: number;
+  total_impressions: number;
+  total_clicks: number;
+  total_attributed_ratings: number;
+  overall_ctr: number | null;
+  overall_rating_conversion: number | null;
+  overall_positive_rating_rate: number | null;
+  average_attributed_rating: number | null;
+  model_metrics: {
+    model_used: string;
+    recommendation_events: number;
+    impressions: number;
+    clicks: number;
+    ctr: number | null;
+    attributed_ratings: number;
+    rating_conversion: number | null;
+    positive_rating_rate: number | null;
+    average_attributed_rating: number | null;
+  }[];
+  rank_metrics: {
+    rank: number;
+    impressions: number;
+    clicks: number;
+    ctr: number | null;
+    attributed_ratings: number;
+    rating_conversion: number | null;
+    average_attributed_rating: number | null;
+  }[];
+}
+
+export interface OfflineEvaluationRow {
+  model: string;
+  precision_at_10: number;
+  hit_rate_at_10: number;
+  ndcg_at_10: number;
+  auc: number;
+  coverage: number;
+  user_coverage: number;
+  diversity: number;
+  evaluated_rows: number;
+}
+
+export interface OfflineEvaluationResponse {
+  source_file: string;
+  rows: OfflineEvaluationRow[];
+  leaders: {
+    metric: string;
+    model: string;
+    value: number;
+  }[];
 }
 
 export interface RatedProductDetail {
@@ -128,14 +186,46 @@ export const api = {
   getRecommendations: (token: string, category: string, top_n = 10): Promise<RecommendResponse> =>
     request("/recommendations", { method: "POST", body: JSON.stringify({ category, top_n }) }, token),
 
-  rateProduct: (token: string, product_id: string, rating: number): Promise<RateResponse> =>
-    request("/interactions/rate", { method: "POST", body: JSON.stringify({ product_id, rating }) }, token),
+  rateProduct: (
+    token: string,
+    product_id: string,
+    rating: number,
+    recommendation_event_id?: number,
+  ): Promise<RateResponse> =>
+    request(
+      "/interactions/rate",
+      {
+        method: "POST",
+        body: JSON.stringify({ product_id, rating, recommendation_event_id }),
+      },
+      token,
+    ),
+
+  logRecommendationClick: (
+    token: string,
+    recommendation_event_id: number,
+    product_id: string,
+  ): Promise<{ logged: boolean }> =>
+    request(
+      "/interactions/recommendation-click",
+      {
+        method: "POST",
+        body: JSON.stringify({ recommendation_event_id, product_id }),
+      },
+      token,
+    ),
 
   getMyInteractions: (token: string): Promise<RateResponse[]> =>
     request("/interactions/mine", {}, token),
 
   getMyInteractionsDetailed: (token: string): Promise<RatedProductDetail[]> =>
     request("/interactions/mine/detailed", {}, token),
+
+  getRecommendationMetrics: (token: string): Promise<RecommendationMetricsResponse> =>
+    request("/analytics/recommendation-metrics", {}, token),
+
+  getOfflineModelEvaluation: (token: string): Promise<OfflineEvaluationResponse> =>
+    request("/analytics/offline-model-evaluation", {}, token),
 
   updateProfile: (token: string, payload: UpdateProfilePayload): Promise<UserProfile> =>
     request("/users/me", { method: "PATCH", body: JSON.stringify(payload) }, token),

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { isAdminEmail } from "../../lib/admin";
 
 const SKIN_TYPES = [
   { value: "dry", label: "Kuru" },
@@ -109,7 +110,7 @@ export default function RegisterPage() {
       await api.register(form);
       const tokenRes = await api.login(form.email, form.password);
       await login(tokenRes.access_token);
-      router.push("/explore");
+      router.push(isAdminEmail(form.email) ? "/dashboard" : "/explore");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Kayıt başarısız.";
       setErrors({ general: message });

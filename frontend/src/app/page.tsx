@@ -14,14 +14,14 @@ const MODEL_ITEMS = [
 ];
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, isAdmin } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace("/explore");
+      router.replace(isAdmin ? "/dashboard" : "/explore");
     }
-  }, [loading, user, router]);
+  }, [loading, user, router, isAdmin]);
 
   if (loading) {
     return (

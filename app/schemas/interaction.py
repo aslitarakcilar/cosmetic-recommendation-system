@@ -8,12 +8,16 @@ from pydantic import BaseModel, Field
 class RateRequest(BaseModel):
     product_id: str
     rating: int = Field(..., ge=1, le=5)
+    recommendation_event_id: int | None = Field(default=None, ge=1)
 
 
 class RateResponse(BaseModel):
     product_id: str
     rating: int
     created_at: datetime
+    recommendation_event_id: int | None = None
+    recommended_rank: int | None = None
+    attributed_within_window: bool = False
 
     model_config = {"from_attributes": True}
 

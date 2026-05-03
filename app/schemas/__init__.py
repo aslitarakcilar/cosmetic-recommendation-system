@@ -1,17 +1,7 @@
-from .auth import LoginRequest, RegisterRequest, TokenResponse
-from .interaction import InteractionSummary, RateRequest, RateResponse
-from .recommendation import RecommendRequest, RecommendResponse, RecommendationItem
-from .user import UserProfile
+"""Schema package.
 
-__all__ = [
-    "LoginRequest",
-    "RegisterRequest",
-    "TokenResponse",
-    "RateRequest",
-    "RateResponse",
-    "InteractionSummary",
-    "RecommendRequest",
-    "RecommendResponse",
-    "RecommendationItem",
-    "UserProfile",
-]
+Import concrete schemas from their module paths, for example:
+`from app.schemas.recommendation import RecommendResponse`
+"""
+
+__all__: list[str] = []

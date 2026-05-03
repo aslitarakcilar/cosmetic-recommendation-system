@@ -6,8 +6,11 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from ..recommendation.content_seeded import content_seeded_recommend
-from ..recommendation.data_loader import lightfm_has_user, user_has_history
-from ..recommendation.hybrid import hybrid_recommend
+from ..recommendation.data_loader import (
+    lightfm_has_user,
+    lightfm_supports_cold_start,
+    to_lightfm_app_user_id,
+)
 from ..recommendation.lightfm import lightfm_recommend
 from ..recommendation.popularity import popularity_recommend
 from ..recommendation.profile import profile_recommend
@@ -20,9 +23,9 @@ from ..services.interaction_service import (
 
 _EXPLANATIONS: dict[str, str] = {
     "lightfm": (
-        "Geçmiş etkileşimlerine göre LightFM collaborative filtering modeli kullanıldı. "
-        "Bu model, benzer kullanıcı davranışlarını öğrenerek senin için en olası "
-        "ürünleri sıralar."
+        "LightFM collaborative filtering modeli kullanıldı. "
+        "Cilt profiline benzer kullanıcıların davranış örüntüleri temel alınarak "
+        "senin için en olası ürünler sıralandı."
     ),
     "hybrid": (
         "Sephora verisetindeki geçmişin bulundu. Sistem, sana benzer kullanıcıların "
@@ -87,25 +90,24 @@ def get_recommendations(
 
     1. User exists in current LightFM artifact  → LightFM CF
     2. App interaction history                  → content-seeded
-    3. Skin profile                             → profile-based
-    4. No context                               → popularity baseline
+    3. Skin profile + LightFM feature space     → LightFM cold-start
+    4. Skin profile                             → profile-based
+    5. No context                               → popularity baseline
     """
     df: pd.DataFrame | None = None
-    path: RecommendationPath
 
-    # ── Path 1: User exists in current LightFM artifact ──────────
-    current_user_id = str(user_id)
+    # ── Path 1: LightFM for known artifact users ───────────────────
+    current_user_id = to_lightfm_app_user_id(user_id)
     if lightfm_has_user(current_user_id):
-        df = lightfm_recommend(current_user_id, category, top_n)
+        df = lightfm_recommend(
+            current_user_id,
+            category,
+            top_n,
+            skin_type=skin_type,
+            skin_tone=skin_tone,
+        )
         if df is not None and not df.empty:
             return "lightfm", _EXPLANATIONS["lightfm"], _df_to_items(df)
-
-        # If this is also a legacy Sephora-history user, preserve the
-        # previous hybrid fallback when LightFM has no category coverage.
-        if user_has_history(current_user_id):
-            df, path = hybrid_recommend(current_user_id, category, top_n)
-            if df is not None and not df.empty:
-                return path, _EXPLANATIONS[path], _df_to_items(df)
 
     # ── Path 2: App interaction history ──────────────────────────
     if user_has_app_history(db, user_id):
@@ -118,12 +120,24 @@ def get_recommendations(
         if df is not None and not df.empty:
             return "content_seeded", _EXPLANATIONS["content_seeded"], _df_to_items(df)
 
-    # ── Path 3: Skin profile ──────────────────────────────────────
+    # ── Path 3: LightFM cold-start for new users with profile data ─
+    if skin_type and skin_tone and lightfm_supports_cold_start():
+        df = lightfm_recommend(
+            current_user_id,
+            category,
+            top_n,
+            skin_type=skin_type,
+            skin_tone=skin_tone,
+        )
+        if df is not None and not df.empty:
+            return "lightfm", _EXPLANATIONS["lightfm"], _df_to_items(df)
+
+    # ── Path 4: Skin profile ──────────────────────────────────────
     if skin_type and skin_tone:
         df = profile_recommend(skin_type, skin_tone, category, top_n)
         if df is not None and not df.empty:
             return "profile", _EXPLANATIONS["profile"], _df_to_items(df)
 
-    # ── Path 4: Popularity fallback ───────────────────────────────
+    # ── Path 5: Popularity fallback ───────────────────────────────
     df = popularity_recommend(category, top_n)
     return "popularity", _EXPLANATIONS["popularity"], _df_to_items(df)

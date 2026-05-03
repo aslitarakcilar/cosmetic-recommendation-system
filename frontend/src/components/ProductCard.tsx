@@ -8,12 +8,10 @@ interface Props {
   rank: number;
   initialRating?: number;
   onRate?: (product_id: string, rating: number) => Promise<void>;
+  onInspect?: (product_id: string) => Promise<void> | void;
 }
 
 function buildReason(item: RecommendationItem) {
-  if (item.score != null && item.score >= 0.8) {
-    return "Yuksek uyum skoru ile one cikiyor.";
-  }
   if (item.rating != null && item.rating >= 4.3) {
     return "Genel kullanici puani guclu oldugu icin oneriliyor.";
   }
@@ -23,55 +21,7 @@ function buildReason(item: RecommendationItem) {
   return "Kategori ve profil sinyallerine gore uygun bir eslesme.";
 }
 
-function getMatchSummary(score: number | null) {
-  if (score == null || !Number.isFinite(score)) {
-    return {
-      label: "Degerlendiriliyor",
-      tone: "text-stone-700",
-      helper: "Model bu urunu ilgili kategori icinde uygun buldu.",
-    };
-  }
-
-  if (score >= 0.75) {
-    return {
-      label: "Cok yuksek uyum",
-      tone: "text-emerald-700",
-      helper: "Bu urun senin profilin ve sinyallerinle guclu eslesiyor.",
-    };
-  }
-
-  if (score >= 0.2) {
-    return {
-      label: "Yuksek uyum",
-      tone: "text-emerald-700",
-      helper: "Model bu urunu ust siralarda gostermeye deger buldu.",
-    };
-  }
-
-  if (score >= -0.6) {
-    return {
-      label: "Iyi uyum",
-      tone: "text-amber-700",
-      helper: "Kategori icinde anlamli bir aday olarak onde yer aliyor.",
-    };
-  }
-
-  if (score >= -1.6) {
-    return {
-      label: "Uygun aday",
-      tone: "text-amber-700",
-      helper: "Liste icinde destekleyici bir secenek olarak oneriliyor.",
-    };
-  }
-
-  return {
-    label: "Kesfedilebilir",
-    tone: "text-stone-700",
-    helper: "Daha niş ama yine de kategori baglaminda ilgili bir secenek.",
-  };
-}
-
-export function ProductCard({ item, rank, initialRating, onRate }: Props) {
+export function ProductCard({ item, rank, initialRating, onRate, onInspect }: Props) {
   const [myRating, setMyRating] = useState<number | null>(initialRating ?? null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -91,17 +41,30 @@ export function ProductCard({ item, rank, initialRating, onRate }: Props) {
     }
   }
 
+  function handleInspect() {
+    if (!onInspect) return;
+    void onInspect(item.product_id);
+  }
+
   const priceLabel =
     item.price_usd != null ? `$${item.price_usd.toFixed(0)}` : "Fiyat yok";
   const recommendationReason = buildReason(item);
-  const matchSummary = getMatchSummary(item.score);
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-[color:var(--border-strong)] bg-[color:var(--surface)] shadow-[0_14px_32px_rgba(28,25,23,0.05)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(28,25,23,0.1)]">
+    <article
+      onClick={handleInspect}
+      className={`group flex h-full flex-col overflow-hidden rounded-[1.75rem] border bg-[color:var(--surface)] shadow-[0_14px_32px_rgba(28,25,23,0.05)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_18px_42px_rgba(28,25,23,0.1)] ${myRating != null ? "border-emerald-200" : "border-[color:var(--border-strong)]"} ${onInspect ? "cursor-pointer" : ""}`}
+    >
       <div className="relative overflow-hidden border-b border-stone-200/80 bg-[radial-gradient(circle_at_top_left,rgba(212,168,104,0.28),transparent_55%),linear-gradient(135deg,#f9f4ed,#f3ece3)] px-5 pb-5 pt-4">
         <div className="absolute right-3 top-3 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-stone-600 shadow-sm">
           #{String(rank).padStart(2, "0")}
         </div>
+        {myRating != null && (
+          <div className="absolute left-3 top-3 flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 shadow-sm">
+            <span>✓</span>
+            <span>{myRating}/5</span>
+          </div>
+        )}
 
         <div className="mt-8 flex items-start justify-between gap-3">
           <div>
@@ -159,13 +122,13 @@ export function ProductCard({ item, rank, initialRating, onRate }: Props) {
           </div>
           <div className="rounded-2xl bg-stone-50 p-3">
             <p className="text-[11px] uppercase tracking-[0.16em] text-stone-400">
-              Uyum
+              Sira
             </p>
-            <p className={`mt-1 text-sm font-medium ${matchSummary.tone}`}>
-              {matchSummary.label}
+            <p className="mt-1 text-sm font-medium text-stone-800">
+              #{String(rank).padStart(2, "0")}
             </p>
             <p className="mt-1 text-[11px] leading-5 text-stone-400">
-              {matchSummary.helper}
+              Bu urun mevcut model tarafindan bu kategori icin ust siralarda listelendi.
             </p>
           </div>
         </div>
@@ -189,7 +152,10 @@ export function ProductCard({ item, rank, initialRating, onRate }: Props) {
                   <button
                     key={star}
                     type="button"
-                    onClick={() => handleRate(star)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleRate(star);
+                    }}
                     onMouseEnter={() => setHovered(star)}
                     disabled={saving}
                     className={`rounded-full px-1 text-xl leading-none transition-colors disabled:cursor-not-allowed ${
