@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { api, type UserProfile } from "../lib/api";
+import { isAdminEmail } from "../lib/admin";
 
 interface AuthState {
   user: UserProfile | null;
@@ -19,6 +20,7 @@ interface AuthContextValue extends AuthState {
   login: (token: string) => Promise<void>;
   logout: () => void;
   refreshUser: (token: string) => Promise<void>;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,7 +82,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        login,
+        logout,
+        refreshUser,
+        isAdmin: isAdminEmail(state.user?.email),
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

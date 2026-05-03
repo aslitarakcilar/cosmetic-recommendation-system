@@ -12,6 +12,11 @@ from ..config import settings
 _PICKLE_CACHE: dict[str, tuple[float, object]] = {}
 
 
+def to_lightfm_app_user_id(user_id: int | str) -> str:
+    """Namespace app users so they never collide with dataset author ids."""
+    return f"app_user:{user_id}"
+
+
 def _require(filename: str) -> Path:
     path = settings.data_interim_dir / filename
     if not path.exists():
@@ -80,11 +85,20 @@ def load_lightfm_data() -> Optional[dict]:
 
 
 def lightfm_has_user(author_id: str) -> bool:
+    """Returns True only for users explicitly present in the LightFM training set."""
     data = load_lightfm_data()
     if data is None:
         return False
     user_to_idx = data.get("user_to_idx") or {}
     return str(author_id) in user_to_idx
+
+
+def lightfm_supports_cold_start() -> bool:
+    """Returns True when the trained LightFM artifact contains user feature space."""
+    data = load_lightfm_data()
+    if data is None:
+        return False
+    return data.get("user_feature_map") is not None and data.get("user_features_matrix") is not None
 
 
 def get_user_history(author_id: str) -> pd.DataFrame:

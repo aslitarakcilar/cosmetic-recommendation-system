@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { api, ApiError } from "../../lib/api";
+import { isAdminEmail } from "../../lib/admin";
 
 const INPUT_CLS =
   "rounded-2xl border border-stone-200 bg-stone-50/80 px-4 py-3 text-sm text-stone-800 placeholder-stone-300 outline-none transition-colors focus:border-stone-700";
@@ -42,7 +43,7 @@ export default function LoginPage() {
     try {
       const res = await api.login(email, password);
       await login(res.access_token);
-      router.push("/explore");
+      router.push(isAdminEmail(email) ? "/dashboard" : "/explore");
     } catch (err) {
       setErrors({
         general: err instanceof ApiError ? err.message : "Giriş başarısız.",

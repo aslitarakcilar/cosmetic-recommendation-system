@@ -4,19 +4,19 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 
-const NAV_ITEMS = [
-  { href: "/explore", label: "Keşfet" },
-  { href: "/profile", label: "Profilim" },
-];
-
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function Header() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const navItems = [
+    { href: "/explore", label: "Keşfet" },
+    { href: "/profile", label: "Profilim" },
+    ...(isAdmin ? [{ href: "/dashboard", label: "Dashboard" }] : []),
+  ];
 
   function handleLogout() {
     logout();
@@ -49,7 +49,7 @@ export function Header() {
           {user ? (
             <>
               <nav className="hidden items-center gap-2 md:flex">
-                {NAV_ITEMS.map((item) => {
+                {navItems.map((item) => {
                   const active = isActive(pathname, item.href);
                   return (
                     <Link
@@ -69,7 +69,7 @@ export function Header() {
 
               <div className="hidden items-center gap-3 rounded-full border border-white/75 bg-white/80 px-3 py-2 shadow-sm sm:flex">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 text-xs font-medium text-stone-700">
-                  {user.email.slice(0, 2).toUpperCase()}
+                  {user.email.split("@")[0].slice(0, 2).toUpperCase()}
                 </div>
                 <div className="max-w-[180px]">
                   <p className="truncate text-xs font-medium text-stone-800">
@@ -117,7 +117,7 @@ export function Header() {
 
       {user && (
         <nav className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-5 pb-3 md:hidden md:px-6">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = isActive(pathname, item.href);
             return (
               <Link

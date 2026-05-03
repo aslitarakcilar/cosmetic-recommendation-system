@@ -36,4 +36,5 @@ class RecommendResponse(BaseModel):
     model_used: RecommendationPath
     model_explanation: str
     total_recommendations: int
+    recommendation_event_id: int
     recommendations: list[RecommendationItem]

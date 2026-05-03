@@ -11,6 +11,7 @@ import {
   type RateResponse,
   type RecommendResponse,
 } from "../../lib/api";
+import { toTitleCase } from "../../lib/utils";
 
 const MIN_FOR_PERSONALIZATION = 3;
 const TOP_N_OPTIONS = [5, 10, 20];
@@ -49,13 +50,6 @@ function RecommendationSkeleton() {
   );
 }
 
-function toTitleCase(value: string) {
-  return value
-    .split(/[_-\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 export default function ExplorePage() {
   const router = useRouter();
@@ -100,10 +94,18 @@ export default function ExplorePage() {
   }, [token]);
 
   const handleRate = useCallback(
-    async (product_id: string, rating: number) => {
+    async (product_id: string, rating: number, recommendationEventId?: number) => {
       if (!token) return;
-      await api.rateProduct(token, product_id, rating);
+      await api.rateProduct(token, product_id, rating, recommendationEventId);
       setMyRatings((prev) => ({ ...prev, [product_id]: rating }));
+    },
+    [token],
+  );
+
+  const handleInspect = useCallback(
+    async (product_id: string, recommendationEventId?: number) => {
+      if (!token || !recommendationEventId) return;
+      await api.logRecommendationClick(token, recommendationEventId, product_id);
     },
     [token],
   );
@@ -492,7 +494,12 @@ export default function ExplorePage() {
                 item={item}
                 rank={index + 1}
                 initialRating={myRatings[item.product_id]}
-                onRate={handleRate}
+                onRate={(product_id, rating) =>
+                  handleRate(product_id, rating, result.recommendation_event_id)
+                }
+                onInspect={(product_id) =>
+                  handleInspect(product_id, result.recommendation_event_id)
+                }
               />
             ))}
           </div>

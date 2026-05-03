@@ -10,6 +10,7 @@ from .services.user_service import get_user_by_id
 from .user_model import User
 
 _bearer = HTTPBearer()
+ADMIN_EMAIL = "aslinur0506@gmail.com"
 
 
 def get_current_user(
@@ -35,3 +36,14 @@ def get_current_user(
         )
 
     return user
+
+
+def get_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.email.lower() != ADMIN_EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user

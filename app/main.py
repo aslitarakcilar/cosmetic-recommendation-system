@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import create_all_tables
-from .routers import auth, interactions, recommendations, users
+from .routers import analytics, auth, interactions, recommendations, users
 
 create_all_tables()
 
@@ -31,6 +31,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(recommendations.router)
 app.include_router(interactions.router)
+app.include_router(analytics.router)
 
 
 @app.get("/health", tags=["system"])
